@@ -52,13 +52,19 @@ Resources:
                   - repo:Barfolemu/theabernathypack:ref:refs/heads/main
                   - repo:Barfolemu@22034301/theabernathypack@1329992406:ref:refs/heads/main
       Policies:
-        - PolicyName: aberpack-github-deploy-db-param
+        - PolicyName: aberpack-github-deploy-runtime-params
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+              # database_url (used by the migrate step) plus the app's own
+              # runtime config/credentials baked into the container's
+              # environment at deploy time (aws_access_key_id/secret,
+              # google_*, email_from, app_url) - Lightsail containers have
+              # no runtime IAM role or metadata endpoint, so this is the
+              # only mechanism for a running container to get any of this.
               - Effect: Allow
                 Action: ssm:GetParameter
-                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/aberpack/prod/database_url
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/aberpack/prod/*
         - PolicyName: aberpack-github-deploy-lightsail
           PolicyDocument:
             Version: "2012-10-17"

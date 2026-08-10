@@ -31,11 +31,27 @@ jobs:
           role-session-name: github-actions-deploy
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Fetch production DATABASE_URL from SSM
+      # Lightsail container services have no runtime IAM role or metadata
+      # endpoint, so deploy-time environment variables are the only way to
+      # give the running container config/credentials. The aws_* ones are
+      # fetched into APP_-prefixed runner variables (not AWS_ACCESS_KEY_ID
+      # directly) to avoid clobbering the OIDC-assumed deploy role's own
+      # credentials that later steps in this same job still need.
+      - name: Fetch production runtime config from SSM
         run: |
-          DB_URL=$(aws ssm get-parameter --name /aberpack/prod/database_url --with-decryption --query 'Parameter.Value' --output text)
-          echo "::add-mask::$DB_URL"
-          echo "DATABASE_URL=$DB_URL" >> "$GITHUB_ENV"
+          fetch() {
+            VALUE=$(aws ssm get-parameter --name "/aberpack/prod/$1" --with-decryption --query 'Parameter.Value' --output text)
+            echo "::add-mask::$VALUE"
+            echo "$2=$VALUE" >> "$GITHUB_ENV"
+          }
+          fetch database_url DATABASE_URL
+          fetch aws_access_key_id APP_AWS_ACCESS_KEY_ID
+          fetch aws_secret_access_key APP_AWS_SECRET_ACCESS_KEY
+          fetch email_from EMAIL_FROM
+          fetch google_client_id GOOGLE_CLIENT_ID
+          fetch google_client_secret GOOGLE_CLIENT_SECRET
+          fetch google_refresh_token GOOGLE_REFRESH_TOKEN
+          fetch app_url APP_URL
 
       - uses: actions/setup-node@v5
         with:
@@ -76,8 +92,28 @@ jobs:
       - name: Create container service deployment
         id: deploy
         run: |
-          CONTAINERS=$(jq -n --arg image "${{ steps.push.outputs.image_ref }}" --arg dburl "$DATABASE_URL" \
-            '{app: {image: $image, environment: {DATABASE_URL: $dburl}, ports: {"3000": "HTTP"}}}')
+          CONTAINERS=$(jq -n \
+            --arg image "${{ steps.push.outputs.image_ref }}" \
+            --arg dburl "$DATABASE_URL" \
+            --arg awsKeyId "$APP_AWS_ACCESS_KEY_ID" \
+            --arg awsSecret "$APP_AWS_SECRET_ACCESS_KEY" \
+            --arg awsRegion "$AWS_REGION" \
+            --arg emailFrom "$EMAIL_FROM" \
+            --arg googleClientId "$GOOGLE_CLIENT_ID" \
+            --arg googleClientSecret "$GOOGLE_CLIENT_SECRET" \
+            --arg googleRefreshToken "$GOOGLE_REFRESH_TOKEN" \
+            --arg appUrl "$APP_URL" \
+            '{app: {image: $image, environment: {
+                DATABASE_URL: $dburl,
+                AWS_ACCESS_KEY_ID: $awsKeyId,
+                AWS_SECRET_ACCESS_KEY: $awsSecret,
+                AWS_REGION: $awsRegion,
+                EMAIL_FROM: $emailFrom,
+                GOOGLE_CLIENT_ID: $googleClientId,
+                GOOGLE_CLIENT_SECRET: $googleClientSecret,
+                GOOGLE_REFRESH_TOKEN: $googleRefreshToken,
+                APP_URL: $appUrl
+              }, ports: {"3000": "HTTP"}}}')
           RESPONSE=$(aws lightsail create-container-service-deployment \
             --region "$AWS_REGION" \
             --service-name "$LIGHTSAIL_SERVICE_NAME" \
