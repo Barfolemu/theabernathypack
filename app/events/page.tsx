@@ -36,7 +36,11 @@ export default async function EventsPage() {
         return (
           <Card key={event.id}>
             <CardHeader>
-              <CardTitle>{event.title}</CardTitle>
+              <CardTitle>
+                <Link href={`/events/${event.id}`} className="hover:underline">
+                  {event.title}
+                </Link>
+              </CardTitle>
               <CardDescription>
                 {eventCategoryLabels[event.category]}
                 {event.category === "other" && event.categorySuggestion

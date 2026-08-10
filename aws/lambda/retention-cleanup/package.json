@@ -1,0 +1,9 @@
+{
+  "name": "aberpack-retention-cleanup",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-ssm": "^3.0.0",
+    "pg": "^8.13.0"
+  }
+}

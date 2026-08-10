@@ -186,7 +186,7 @@ export const eventRsvps = pgTable(
   {
     eventId: uuid("event_id")
       .notNull()
-      .references(() => events.id),
+      .references(() => events.id, { onDelete: "cascade" }),
     profileId: uuid("profile_id")
       .notNull()
       .references(() => profiles.id),
@@ -195,6 +195,9 @@ export const eventRsvps = pgTable(
   },
   (table) => [primaryKey({ columns: [table.eventId, table.profileId] })],
 );
+
+export type EventRsvp = typeof eventRsvps.$inferSelect;
+export type RsvpStatus = (typeof rsvpStatusEnum.enumValues)[number];
 
 // 3.7 event_messages
 export const eventMessages = pgTable("event_messages", {
@@ -208,3 +211,5 @@ export const eventMessages = pgTable("event_messages", {
   body: text("body").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export type EventMessage = typeof eventMessages.$inferSelect;

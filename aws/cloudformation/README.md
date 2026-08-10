@@ -44,3 +44,43 @@ trailing slash stripped via `Fn::Select`/`Fn::Split`). Redeploy.
 Future stack updates that don't touch the certificate or domain binding can
 just be single-pass `cloudformation deploy` runs against the full template
 as-is.
+
+## Deploying the retention-cleanup Lambda's code (M5+)
+
+The Lambda's `Code` points at an S3 object (`aberpack-photos-bucket`,
+key `lambda/retention-cleanup.zip`) rather than an inline `ZipFile`, because
+it needs `pg` and `@aws-sdk/client-ssm` bundled — neither ships in the base
+Lambda runtime image, and inline `ZipFile` has a 4KB/no-dependencies limit.
+
+To ship a code change:
+
+```
+cd aws/lambda/retention-cleanup
+npm install --omit=dev
+rm -f retention-cleanup.zip
+zip -r -X retention-cleanup.zip index.mjs package.json node_modules
+aws s3 cp retention-cleanup.zip s3://aberpack-photos-bucket/lambda/retention-cleanup.zip
+```
+
+Then either `aws cloudformation deploy` (only actually redeploys the Lambda
+if some other property in the template also changed — CloudFormation doesn't
+hash-check external S3 content on its own) or, for a pure code-only change,
+just `aws lambda update-function-code --function-name aberpack-retention-cleanup
+--s3-bucket aberpack-photos-bucket --s3-key lambda/retention-cleanup.zip`
+directly.
+
+The Lambda fetches the DB connection string itself at runtime via
+`ssm:GetParameter` on `/aberpack/prod/database_url` (`WithDecryption: true`)
+— **not** a CloudFormation `{{resolve:ssm-secure:...}}` dynamic reference,
+because those are only supported for a fixed whitelist of resource
+properties (RDS/IAM/ElastiCache passwords, etc.) that does not include
+`AWS::Lambda::Function` environment variables. Verified against the current
+CloudFormation dynamic-references docs before implementing — this would have
+been a wrong (and silently broken) assumption otherwise.
+
+To test a deploy without waiting for the daily `rate(1 day)` schedule:
+`aws lambda invoke --function-name aberpack-retention-cleanup --log-type Tail
+/tmp/out.json` and read the base64-decoded `LogResult`. Invoking it requires
+`lambda:InvokeFunction` on the dev role, which isn't part of the routine
+`LambdaRetentionJob` statement — it was added specifically for this kind of
+manual verification.

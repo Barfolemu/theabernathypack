@@ -22,6 +22,13 @@
       "when": 1786324741776,
       "tag": "0002_dry_archangel",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786370840370,
+      "tag": "0003_easy_tomas",
+      "breakpoints": true
     }
   ]
 }

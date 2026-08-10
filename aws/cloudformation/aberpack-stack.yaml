@@ -122,6 +122,13 @@ Resources:
                 Resource:
                   - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/aberpack-retention-cleanup
                   - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/aberpack-retention-cleanup:*
+        - PolicyName: aberpack-retention-cleanup-db-param
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/aberpack/prod/database_url
       Tags:
         - Key: project
           Value: theabernathypack
@@ -134,14 +141,15 @@ Resources:
       Handler: index.handler
       Role: !GetAtt RetentionCleanupLambdaRole.Arn
       Timeout: 30
+      # M5: real retention logic. The deployment package (index.mjs + the
+      # bundled pg / @aws-sdk/client-ssm dependencies, since neither ships in
+      # the base Lambda runtime image) is built and uploaded to this bucket
+      # key by aws/lambda/retention-cleanup's own build step, ahead of
+      # `aws cloudformation deploy` picking it up here. See
+      # aws/cloudformation/README.md.
       Code:
-        ZipFile: |
-          exports.handler = async () => {
-            // Placeholder for M0. Real retention logic (delete events, and
-            // cascaded event_rsvps/event_messages, where
-            // event_datetime < now() - interval '14 days') lands in M5.
-            console.log("aberpack-retention-cleanup: not yet implemented (M5)");
-          };
+        S3Bucket: !Ref PhotosBucket
+        S3Key: lambda/retention-cleanup.zip
       Tags:
         - Key: project
           Value: theabernathypack
