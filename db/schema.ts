@@ -166,6 +166,18 @@ export const events = pgTable(
   ],
 );
 
+export type Event = typeof events.$inferSelect;
+export type EventCategory = (typeof eventCategoryEnum.enumValues)[number];
+
+export const eventCategoryLabels: Record<EventCategory, string> = {
+  casual_walk: "Casual Walk",
+  dog_playdate: "Dog Playdate",
+  group_hike: "Group Hike",
+  social_yappy_hour: "Social Yappy Hour",
+  community_trip: "Community Trip",
+  other: "Other",
+};
+
 // 3.6 event_rsvps
 export const rsvpStatusEnum = pgEnum("rsvp_status", ["going", "interested"]);
 

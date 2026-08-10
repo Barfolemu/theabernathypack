@@ -17,6 +17,9 @@ export async function SiteHeader() {
                 Admin
               </Link>
             )}
+            <Link href="/events" className="underline-offset-4 hover:underline">
+              Events
+            </Link>
             <Link href="/profiles" className="underline-offset-4 hover:underline">
               My Profiles
             </Link>
