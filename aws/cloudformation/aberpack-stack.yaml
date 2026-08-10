@@ -1,0 +1,195 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  theabernathypack.com M0 foundation stack: photo storage bucket, Lightsail
+  container service + certificate for the custom domain, retention-cleanup
+  Lambda skeleton with its daily EventBridge Scheduler trigger. Route53 DNS
+  records are added in a second pass once the certificate's DNS validation
+  values and the container service's generated public domain are known (see
+  aws/cloudformation/README.md).
+
+Parameters:
+  CertificateDomainName:
+    Type: String
+    Default: theabernathypack.com
+  ContainerServiceName:
+    Type: String
+    Default: aberpack-service
+  CertificateName:
+    Type: String
+    Default: aberpack-cert
+  HostedZoneId:
+    Type: String
+    Default: Z0785668SS4SC8JLVH0U
+    Description: Existing Route53 hosted zone for theabernathypack.com.
+  # Fixed, AWS-documented alias hosted zone ID for Lightsail container
+  # services in us-east-1 (differs per region; see "Route domain traffic to
+  # a Lightsail container service using Route 53" in the Lightsail docs).
+  LightsailAliasHostedZoneId:
+    Type: String
+    Default: Z06246771KYU0IRHI74W4
+
+Resources:
+  PhotosBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: aberpack-photos-bucket
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: project
+          Value: theabernathypack
+
+  AberpackCertificate:
+    Type: AWS::Lightsail::Certificate
+    Properties:
+      CertificateName: !Ref CertificateName
+      DomainName: !Ref CertificateDomainName
+      Tags:
+        - Key: project
+          Value: theabernathypack
+
+  AberpackContainerService:
+    Type: AWS::Lightsail::Container
+    Properties:
+      ServiceName: !Ref ContainerServiceName
+      Power: nano
+      Scale: 1
+      # M0 placeholder deployment: a public nginx image proves the container
+      # service + certificate + DNS wiring end to end without needing a real
+      # app image pushed to Lightsail's private registry yet. The real
+      # Next.js image replaces this starting in M7 (CI/CD).
+      ContainerServiceDeployment:
+        Containers:
+          - ContainerName: placeholder
+            Image: nginx:latest
+            Ports:
+              - Port: 80
+                Protocol: HTTP
+        PublicEndpoint:
+          ContainerName: placeholder
+          ContainerPort: 80
+      PublicDomainNames:
+        - CertificateName: !Ref CertificateName
+          DomainNames:
+            - !Ref CertificateDomainName
+      Tags:
+        - Key: project
+          Value: theabernathypack
+    DependsOn: AberpackCertificate
+
+  RetentionCleanupLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: aberpack-retention-cleanup-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: aberpack-retention-cleanup-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/aberpack-retention-cleanup
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/aberpack-retention-cleanup:*
+      Tags:
+        - Key: project
+          Value: theabernathypack
+
+  RetentionCleanupLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: aberpack-retention-cleanup
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt RetentionCleanupLambdaRole.Arn
+      Timeout: 30
+      Code:
+        ZipFile: |
+          exports.handler = async () => {
+            // Placeholder for M0. Real retention logic (delete events, and
+            // cascaded event_rsvps/event_messages, where
+            // event_datetime < now() - interval '14 days') lands in M5.
+            console.log("aberpack-retention-cleanup: not yet implemented (M5)");
+          };
+      Tags:
+        - Key: project
+          Value: theabernathypack
+
+  RetentionSchedulerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: aberpack-retention-scheduler-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: aberpack-retention-scheduler-invoke
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt RetentionCleanupLambda.Arn
+      Tags:
+        - Key: project
+          Value: theabernathypack
+
+  RetentionSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: aberpack-retention-schedule
+      Description: Daily trigger for the aberpack-retention-cleanup Lambda.
+      ScheduleExpression: rate(1 day)
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt RetentionCleanupLambda.Arn
+        RoleArn: !GetAtt RetentionSchedulerRole.Arn
+
+  ApexDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref CertificateDomainName
+      Type: A
+      AliasTarget:
+        HostedZoneId: !Ref LightsailAliasHostedZoneId
+        # AberpackContainerService.Url is "https://<host>/" - extract just
+        # the hostname for the AliasTarget DNSName.
+        DNSName: !Select [2, !Split ["/", !GetAtt AberpackContainerService.Url]]
+        EvaluateTargetHealth: true
+
+Outputs:
+  ContainerServiceUrl:
+    Description: >
+      The Lightsail-generated public URL for the container service. Used to
+      derive the AliasTarget DNSName for the Route53 record added in phase 2.
+    Value: !GetAtt AberpackContainerService.Url
+  CertificateArn:
+    Value: !GetAtt AberpackCertificate.CertificateArn
+  CertificateStatus:
+    Description: Will be PENDING_VALIDATION until the DNS validation record is added.
+    Value: !GetAtt AberpackCertificate.Status
+  PhotosBucketName:
+    Value: !Ref PhotosBucket
