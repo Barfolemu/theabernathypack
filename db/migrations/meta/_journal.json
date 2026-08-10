@@ -8,6 +8,20 @@
       "when": 1786317469877,
       "tag": "0000_pretty_molten_man",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786322749313,
+      "tag": "0001_clammy_firedrake",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786324741776,
+      "tag": "0002_dry_archangel",
+      "breakpoints": true
     }
   ]
 }

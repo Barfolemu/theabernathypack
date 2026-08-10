@@ -13,14 +13,40 @@ import { sql } from "drizzle-orm";
 
 // 3.1 logins
 export const loginStatusEnum = pgEnum("login_status", ["active", "deactivated"]);
+export const loginRoleEnum = pgEnum("login_role", ["member", "admin"]);
 
 export const logins = pgTable("logins", {
   id: uuid("id").primaryKey().$defaultFn(() => randomUUID()),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   status: loginStatusEnum("status").notNull().default("active"),
+  role: loginRoleEnum("role").notNull().default("member"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Login = typeof logins.$inferSelect;
+
+// 3.9 sessions
+export const sessions = pgTable("sessions", {
+  id: uuid("id").primaryKey().$defaultFn(() => randomUUID()),
+  loginId: uuid("login_id")
+    .notNull()
+    .references(() => logins.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// 3.10 password_reset_tokens
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: uuid("id").primaryKey().$defaultFn(() => randomUUID()),
+  loginId: uuid("login_id")
+    .notNull()
+    .references(() => logins.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // 3.2 profiles
