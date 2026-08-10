@@ -42,6 +42,20 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      # Needed so the browser's presigned-PUT avatar upload (M2) isn't blocked
+      # by the CORS preflight — the bucket stays private, this only governs
+      # which origins may issue signed requests against it.
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - http://localhost:3000
+              - https://theabernathypack.com
+            AllowedMethods:
+              - GET
+              - PUT
+            AllowedHeaders:
+              - "*"
+            MaxAge: 3000
       Tags:
         - Key: project
           Value: theabernathypack

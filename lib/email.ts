@@ -22,3 +22,14 @@ export async function sendPasswordResetEmail(to: string, token: string) {
     text: `We received a request to reset your theabernathypack password.\n\nReset it here: ${url}\n\nThis link expires in 1 hour. If you didn't request this, you can ignore this email.`,
   });
 }
+
+export async function sendInviteEmail(to: string, token: string, profileDisplayName: string) {
+  const url = `${process.env.APP_URL}/register?invite=${token}`;
+
+  await transporter.sendMail({
+    from: process.env.EMAIL_FROM,
+    to,
+    subject: "You've been invited to theabernathypack",
+    text: `You've been invited to claim the "${profileDisplayName}" profile on theabernathypack.\n\nAccept your invite here: ${url}\n\nIf you weren't expecting this, you can ignore this email.`,
+  });
+}

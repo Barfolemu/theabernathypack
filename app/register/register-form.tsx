@@ -10,14 +10,34 @@ import { registerAction, type RegisterState } from "./actions";
 
 const initialState: RegisterState = {};
 
-export function RegisterForm() {
+export function RegisterForm({
+  inviteToken,
+  inviteEmail,
+}: {
+  inviteToken?: string;
+  inviteEmail?: string;
+}) {
   const [state, formAction, pending] = useActionState(registerAction, initialState);
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
+      {inviteToken && <input type="hidden" name="inviteToken" value={inviteToken} />}
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="displayName">Your name</Label>
+        <Input id="displayName" name="displayName" autoComplete="name" required />
+      </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="email">Email</Label>
-        <Input id="email" name="email" type="email" autoComplete="email" required />
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          required
+          defaultValue={inviteEmail}
+          readOnly={!!inviteEmail}
+          className={inviteEmail ? "bg-muted" : undefined}
+        />
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="password">Password</Label>
@@ -47,7 +67,7 @@ export function RegisterForm() {
         </Alert>
       )}
       <Button type="submit" disabled={pending}>
-        {pending ? "Creating account…" : "Create account"}
+        {pending ? "Creating account…" : inviteToken ? "Accept invite" : "Create account"}
       </Button>
       <p className="text-center text-sm text-muted-foreground">
         Already have an account?{" "}

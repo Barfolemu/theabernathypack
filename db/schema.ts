@@ -67,6 +67,8 @@ export const profiles = pgTable("profiles", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export type Profile = typeof profiles.$inferSelect;
+
 // 3.3 relationships
 export const relationshipCategoryEnum = pgEnum("relationship_category", [
   "child",
@@ -109,6 +111,8 @@ export const invites = pgTable("invites", {
   email: text("email").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export type Invite = typeof invites.$inferSelect;
 
 // 3.5 events
 export const eventCategoryEnum = pgEnum("event_category", [
