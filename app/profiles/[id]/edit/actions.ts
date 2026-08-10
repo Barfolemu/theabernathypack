@@ -3,10 +3,11 @@
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { invites, profiles, type Profile } from "@/db/schema";
+import { invites, profiles, relationshipCategoryEnum, type Profile, type RelationshipCategory } from "@/db/schema";
 import { getDefaultAvatarsFor } from "@/lib/avatars";
 import { getSession } from "@/lib/auth/session";
 import { canControlProfile, getMyBaseProfile } from "@/lib/profiles";
+import { createRelationshipEdge, removeRelationshipEdge } from "@/lib/relationships";
 import { createAvatarUploadUrl, isAllowedAvatarContentType } from "@/lib/s3";
 
 export type EditProfileState = { error?: string };
@@ -86,4 +87,41 @@ export async function setProfileAvatarAction(profileId: string, key: string) {
     .update(profiles)
     .set({ avatarKey: key, defaultAvatarId: null, updatedAt: new Date() })
     .where(eq(profiles.id, profileId));
+}
+
+export type AddRelationshipState = { error?: string };
+
+export async function addRelationshipAction(
+  profileId: string,
+  _prevState: AddRelationshipState,
+  formData: FormData,
+): Promise<AddRelationshipState> {
+  const { myBaseProfile } = await requireControl(profileId);
+
+  const otherProfileId = String(formData.get("otherProfileId") ?? "");
+  const category = String(formData.get("category") ?? "");
+  if (!otherProfileId) {
+    return { error: "Choose a profile to link." };
+  }
+  if (!relationshipCategoryEnum.enumValues.includes(category as RelationshipCategory)) {
+    return { error: "Choose a category." };
+  }
+
+  const result = await createRelationshipEdge(
+    myBaseProfile,
+    profileId,
+    otherProfileId,
+    category as RelationshipCategory,
+  );
+  if (result.error) {
+    return result;
+  }
+
+  redirect(`/profiles/${profileId}/edit`);
+}
+
+export async function removeRelationshipAction(profileId: string, relationshipId: string) {
+  const { myBaseProfile } = await requireControl(profileId);
+  await removeRelationshipEdge(myBaseProfile, relationshipId);
+  redirect(`/profiles/${profileId}/edit`);
 }

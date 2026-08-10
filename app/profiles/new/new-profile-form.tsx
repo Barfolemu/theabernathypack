@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { getDefaultAvatarsFor } from "@/lib/avatars";
+import { humanRelationshipCategories, relationshipCategoryLabels } from "@/db/schema";
 import { createProfileAction, type CreateProfileState } from "./actions";
 
 const initialState: CreateProfileState = {};
@@ -16,6 +17,7 @@ export function NewProfileForm() {
   const [state, formAction, pending] = useActionState(createProfileAction, initialState);
   const [profileType, setProfileType] = useState<"human" | "dog">("dog");
   const [avatarId, setAvatarId] = useState(getDefaultAvatarsFor("dog")[0].id);
+  const [relationshipCategory, setRelationshipCategory] = useState(humanRelationshipCategories[0]);
 
   function selectType(type: "human" | "dog") {
     setProfileType(type);
@@ -26,6 +28,9 @@ export function NewProfileForm() {
     <form action={formAction} className="flex flex-col gap-4">
       <input type="hidden" name="profileType" value={profileType} />
       <input type="hidden" name="defaultAvatarId" value={avatarId} />
+      {profileType === "human" && (
+        <input type="hidden" name="relationshipCategory" value={relationshipCategory} />
+      )}
 
       <div className="flex flex-col gap-1.5">
         <Label>Type</Label>
@@ -56,6 +61,24 @@ export function NewProfileForm() {
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="breed">Breed</Label>
           <Input id="breed" name="breed" />
+        </div>
+      )}
+
+      {profileType === "human" && (
+        <div className="flex flex-col gap-1.5">
+          <Label>How are they related to you?</Label>
+          <div className="flex flex-wrap gap-2">
+            {humanRelationshipCategories.map((category) => (
+              <Button
+                key={category}
+                type="button"
+                variant={relationshipCategory === category ? "default" : "outline"}
+                onClick={() => setRelationshipCategory(category)}
+              >
+                {relationshipCategoryLabels[category]}
+              </Button>
+            ))}
+          </div>
         </div>
       )}
 

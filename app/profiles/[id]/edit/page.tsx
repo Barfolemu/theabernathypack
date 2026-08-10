@@ -15,12 +15,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { db } from "@/db";
-import { profiles } from "@/db/schema";
+import { profiles, relationshipCategoryEnum, relationshipCategoryLabels } from "@/db/schema";
 import { getSession } from "@/lib/auth/session";
 import { canControlProfile, getMyBaseProfile } from "@/lib/profiles";
-import { deleteProfileAction } from "./actions";
+import { canManageEdge, getPack, listLinkableProfiles } from "@/lib/relationships";
+import { deleteProfileAction, removeRelationshipAction } from "./actions";
 import { AvatarUploader } from "./avatar-uploader";
 import { EditProfileForm } from "./edit-profile-form";
+import { AddToPackForm } from "./pack-section";
 
 export default async function EditProfilePage(props: PageProps<"/profiles/[id]/edit">) {
   const { id } = await props.params;
@@ -36,6 +38,14 @@ export default async function EditProfilePage(props: PageProps<"/profiles/[id]/e
 
   const isBaseProfile = target.id === myBaseProfile.id;
   const boundDelete = deleteProfileAction.bind(null, target.id);
+
+  const [pack, linkableProfiles] = await Promise.all([
+    getPack(target.id),
+    listLinkableProfiles(target.id),
+  ]);
+  const linkable = linkableProfiles.filter((candidate) =>
+    canManageEdge(myBaseProfile, target, candidate),
+  );
 
   return (
     <div className="mx-auto flex w-full max-w-sm flex-1 flex-col gap-6 p-4">
@@ -74,6 +84,49 @@ export default async function EditProfilePage(props: PageProps<"/profiles/[id]/e
               </AlertDialogContent>
             </AlertDialog>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Pack</CardTitle>
+          <CardDescription>Who {target.displayName} is linked to.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {pack.length === 0 && (
+            <p className="text-sm text-muted-foreground">No connections yet.</p>
+          )}
+          {pack.map((member) => {
+            const canRemove = canManageEdge(myBaseProfile, target, member.profile);
+            return (
+              <div key={member.relationshipId} className="flex items-center gap-3">
+                <ProfileAvatar profile={member.profile} size={40} />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">{member.profile.displayName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {relationshipCategoryLabels[member.category]}
+                  </p>
+                </div>
+                {canRemove && (
+                  <form
+                    action={removeRelationshipAction.bind(null, target.id, member.relationshipId)}
+                  >
+                    <Button type="submit" variant="ghost" size="sm">
+                      Remove
+                    </Button>
+                  </form>
+                )}
+              </div>
+            );
+          })}
+
+          <div className="border-t pt-4">
+            <AddToPackForm
+              profileId={target.id}
+              linkable={linkable}
+              categories={relationshipCategoryEnum.enumValues}
+            />
+          </div>
         </CardContent>
       </Card>
     </div>

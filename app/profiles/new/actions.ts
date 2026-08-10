@@ -2,9 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { profiles } from "@/db/schema";
+import { profiles, relationships, humanRelationshipCategories, type RelationshipCategory } from "@/db/schema";
 import { getDefaultAvatarsFor } from "@/lib/avatars";
 import { getSession } from "@/lib/auth/session";
+import { canonicalPair } from "@/lib/relationships";
 import { getMyBaseProfile } from "@/lib/profiles";
 
 export type CreateProfileState = { error?: string };
@@ -32,12 +33,35 @@ export async function createProfileAction(
     return { error: "Choose an avatar." };
   }
 
-  await db.insert(profiles).values({
-    profileType,
-    displayName,
-    breed,
-    defaultAvatarId,
-    creatorId: myBaseProfile.id,
+  // The relationship category isn't a profile attribute — it describes the edge
+  // back to whoever's creating this profile, so it's resolved here rather than
+  // stored on the profile itself. Dogs are always "pet"; humans pick from the rest.
+  let relationshipCategory: RelationshipCategory = "pet";
+  if (profileType === "human") {
+    const submitted = String(formData.get("relationshipCategory") ?? "");
+    if (!humanRelationshipCategories.includes(submitted as (typeof humanRelationshipCategories)[number])) {
+      return { error: "Choose how they're related to you." };
+    }
+    relationshipCategory = submitted as RelationshipCategory;
+  }
+
+  const [profile] = await db
+    .insert(profiles)
+    .values({
+      profileType,
+      displayName,
+      breed,
+      defaultAvatarId,
+      creatorId: myBaseProfile.id,
+    })
+    .returning();
+
+  const [profileIdA, profileIdB] = canonicalPair(myBaseProfile.id, profile.id);
+  await db.insert(relationships).values({
+    profileIdA,
+    profileIdB,
+    category: relationshipCategory,
+    createdByProfileId: myBaseProfile.id,
   });
 
   redirect("/profiles");

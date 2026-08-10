@@ -102,6 +102,22 @@ export const relationships = pgTable(
   ],
 );
 
+export type Relationship = typeof relationships.$inferSelect;
+export type RelationshipCategory = (typeof relationshipCategoryEnum.enumValues)[number];
+
+// Dogs are always "pet" at profile-creation time; humans pick from the rest.
+export const humanRelationshipCategories = relationshipCategoryEnum.enumValues.filter(
+  (category) => category !== "pet",
+);
+
+export const relationshipCategoryLabels: Record<RelationshipCategory, string> = {
+  child: "Kid",
+  pet: "Pet",
+  partner: "Partner",
+  spouse: "Spouse",
+  other: "Other",
+};
+
 // 3.4 invites
 export const invites = pgTable("invites", {
   id: uuid("id").primaryKey().$defaultFn(() => randomUUID()),
