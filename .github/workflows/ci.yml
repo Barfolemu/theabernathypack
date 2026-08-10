@@ -19,8 +19,11 @@ jobs:
 
       - run: npm run lint
 
-      - run: npx tsc --noEmit
-
+      # `next build` runs full TypeScript type-checking itself (it fails the
+      # build on type errors), so there's no separate `tsc --noEmit` step —
+      # bare tsc also can't see PageProps/LayoutProps, which Next.js only
+      # generates into .next/types as part of building.
+      #
       # No DATABASE_URL needed: every route is server-rendered on demand
       # (no static generation touches the DB), and `pg.Pool` doesn't
       # connect until a query actually runs.
