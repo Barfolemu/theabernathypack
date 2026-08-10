@@ -84,3 +84,30 @@ To test a deploy without waiting for the daily `rate(1 day)` schedule:
 `lambda:InvokeFunction` on the dev role, which isn't part of the routine
 `LambdaRetentionJob` statement — it was added specifically for this kind of
 manual verification.
+
+## `aberpack-cicd-stack.yaml` (M7+)
+
+Separate stack from `aberpack-stack.yaml` — see the template's own header
+comment for why. Deployed once via the standard change-set review sequence
+(`create-change-set --change-set-type CREATE` → `describe-change-set` → user
+approval → `execute-change-set`), same pattern as any other real AWS change
+on this project. It only needs redeploying if the deploy role's permissions
+change, or if the repo is ever renamed/transferred (which would change its
+`repo:OWNER@OWNER_ID/REPO@REPO_ID` OIDC subject and require updating the
+trust policy's `sub` condition).
+
+**Only one GitHub OIDC provider (`token.actions.githubusercontent.com`) can
+exist per AWS account.** If another project sharing this account
+(752274131448) also wants GitHub Actions OIDC, it must reuse
+`GitHubActionsOidcProvider` from this stack rather than declare its own, or
+stack creation will fail with an "already exists" error.
+
+The actual app deploy (`.github/workflows/deploy.yml`) runs
+`aws lightsail push-container-image`, which shells out to a separate
+`lightsailctl` plugin binary that does its own AWS credential resolution —
+it does not honor `AWS_PROFILE`/assume-role profile chains the way the `aws`
+CLI itself does. When testing this locally (not needed in CI, where
+`aws-actions/configure-aws-credentials` already exports plain
+`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN`), use
+`eval "$(aws configure export-credentials --profile theabernathypack --format env)"`
+first so `lightsailctl` sees plain env-var credentials instead.
