@@ -1,0 +1,102 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  LIGHTSAIL_SERVICE_NAME: aberpack-service
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # No long-lived AWS keys stored in GitHub: this exchanges a short-lived
+      # OIDC token for temporary credentials scoped to aberpack-github-deploy-role
+      # (see aws/cloudformation/aberpack-cicd-stack.yaml).
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: github-actions-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Fetch production DATABASE_URL from SSM
+        run: |
+          DB_URL=$(aws ssm get-parameter --name /aberpack/prod/database_url --with-decryption --query 'Parameter.Value' --output text)
+          echo "::add-mask::$DB_URL"
+          echo "DATABASE_URL=$DB_URL" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # A failed/partial migration fails this step, which fails the job
+      # before any image is built or deployed - a broken schema never ships.
+      - name: Run database migrations
+        run: npm run db:migrate
+
+      - name: Build Docker image
+        run: docker build -t theabernathypack:${{ github.sha }} .
+
+      - name: Install Lightsail Control (lightsailctl) plugin
+        run: |
+          curl "https://s3.us-west-2.amazonaws.com/lightsailctl/latest/linux-amd64/lightsailctl" -o /usr/local/bin/lightsailctl
+          sudo chmod +x /usr/local/bin/lightsailctl
+
+      - name: Push image to Lightsail registry
+        id: push
+        run: |
+          OUTPUT=$(aws lightsail push-container-image \
+            --region "$AWS_REGION" \
+            --service-name "$LIGHTSAIL_SERVICE_NAME" \
+            --label app \
+            --image theabernathypack:${{ github.sha }})
+          echo "$OUTPUT"
+          IMAGE_REF=$(echo "$OUTPUT" | sed -n 's/.*Refer to this image as "\(.*\)" in deployments\..*/\1/p')
+          if [ -z "$IMAGE_REF" ]; then
+            echo "Could not parse registered image reference from push output" >&2
+            exit 1
+          fi
+          echo "image_ref=$IMAGE_REF" >> "$GITHUB_OUTPUT"
+
+      - name: Create container service deployment
+        run: |
+          aws lightsail create-container-service-deployment \
+            --region "$AWS_REGION" \
+            --service-name "$LIGHTSAIL_SERVICE_NAME" \
+            --containers "{\"app\":{\"image\":\"${{ steps.push.outputs.image_ref }}\",\"ports\":{\"3000\":\"HTTP\"}}}" \
+            --public-endpoint "{\"containerName\":\"app\",\"containerPort\":3000}"
+
+      - name: Wait for deployment to become active
+        run: |
+          for i in $(seq 1 30); do
+            STATE=$(aws lightsail get-container-services \
+              --service-name "$LIGHTSAIL_SERVICE_NAME" \
+              --query 'containerServices[0].currentDeployment.state' \
+              --output text)
+            echo "Deployment state: $STATE"
+            if [ "$STATE" = "ACTIVE" ]; then
+              exit 0
+            fi
+            if [ "$STATE" = "FAILED" ]; then
+              echo "Deployment failed" >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for deployment to become active" >&2
+          exit 1

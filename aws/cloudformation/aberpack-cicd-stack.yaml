@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  theabernathypack.com M7 CI/CD stack: GitHub Actions OIDC identity provider
+  and the deploy role .github/workflows/deploy.yml assumes on merge to main
+  (drizzle-kit migrate against prod, then build/push/deploy the app image to
+  the Lightsail container service). Kept separate from aberpack-stack.yaml
+  since it's CI/CD plumbing, not application infra.
+  #
+  # NOTE: an AWS account may only have ONE IAM OIDC provider per issuer URL.
+  # If another project in this same AWS account (752274131448) also wants
+  # GitHub Actions OIDC, it must reuse GitHubActionsOidcProvider below rather
+  # than declare its own `token.actions.githubusercontent.com` provider, or
+  # stack creation will fail with an "already exists" error.
+
+Resources:
+  GitHubActionsOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      # ThumbprintList intentionally omitted: IAM now retrieves and verifies
+      # the IdP's TLS certificate itself (falling back to a thumbprint only
+      # if that lookup fails), so hand-maintaining GitHub's certificate
+      # thumbprint here is unnecessary as of the current CFN resource spec.
+      Tags:
+        - Key: project
+          Value: theabernathypack
+
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: aberpack-github-deploy-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubActionsOidcProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                # Both forms are listed because GitHub repos created after
+                # 2026-07-15 default to the new immutable
+                # repo:OWNER@OWNER_ID/REPO@REPO_ID subject format, and which
+                # one this repo actually presents isn't self-evident from
+                # the classic form alone. Barfolemu's owner id is 22034301,
+                # theabernathypack's repo id is 1329992406 (fetched via
+                # `gh api repos/Barfolemu/theabernathypack`).
+                token.actions.githubusercontent.com:sub:
+                  - repo:Barfolemu/theabernathypack:ref:refs/heads/main
+                  - repo:Barfolemu@22034301/theabernathypack@1329992406:ref:refs/heads/main
+      Policies:
+        - PolicyName: aberpack-github-deploy-db-param
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/aberpack/prod/database_url
+        - PolicyName: aberpack-github-deploy-lightsail
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Lightsail has unusually poor resource-level ARN support
+              # (confirmed against live docs during M0 for the sibling
+              # dev-role policy) so these are Resource: "*", same as the
+              # dev role's own LightsailAll statement.
+              - Effect: Allow
+                Action:
+                  - lightsail:CreateContainerServiceRegistryLogin
+                  - lightsail:RegisterContainerImage
+                  - lightsail:CreateContainerServiceDeployment
+                  - lightsail:GetContainerServices
+                  - lightsail:GetContainerImages
+                Resource: "*"
+      Tags:
+        - Key: project
+          Value: theabernathypack
+
+Outputs:
+  GitHubDeployRoleArn:
+    Value: !GetAtt GitHubDeployRole.Arn

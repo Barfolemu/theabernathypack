@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   check,
   primaryKey,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -62,7 +63,7 @@ export const profiles = pgTable("profiles", {
   loginId: uuid("login_id").unique().references(() => logins.id),
   creatorId: uuid("creator_id")
     .notNull()
-    .references((): any => profiles.id),
+    .references((): AnyPgColumn => profiles.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

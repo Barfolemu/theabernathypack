@@ -1,0 +1,8 @@
+node_modules
+.next
+.git
+.env*
+aws
+requirements
+plans
+README.md
