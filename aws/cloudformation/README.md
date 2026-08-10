@@ -97,10 +97,10 @@ change, or if the repo is ever renamed/transferred (which would change its
 trust policy's `sub` condition).
 
 **Only one GitHub OIDC provider (`token.actions.githubusercontent.com`) can
-exist per AWS account.** If another project sharing this account
-(752274131448) also wants GitHub Actions OIDC, it must reuse
-`GitHubActionsOidcProvider` from this stack rather than declare its own, or
-stack creation will fail with an "already exists" error.
+exist per AWS account.** If another project sharing this AWS account also
+wants GitHub Actions OIDC, it must reuse `GitHubActionsOidcProvider` from
+this stack rather than declare its own, or stack creation will fail with an
+"already exists" error.
 
 The actual app deploy (`.github/workflows/deploy.yml`) runs
 `aws lightsail push-container-image`, which shells out to a separate
@@ -111,3 +111,52 @@ CLI itself does. When testing this locally (not needed in CI, where
 `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN`), use
 `eval "$(aws configure export-credentials --profile theabernathypack --format env)"`
 first so `lightsailctl` sees plain env-var credentials instead.
+
+## `aberpack-app-runtime` IAM user (M7+, manual — not in CloudFormation)
+
+Lightsail Container Services have no runtime IAM role or metadata endpoint,
+so the *running app container* (not the CI/CD pipeline — that's the
+`aberpack-github-deploy-role` above) needs its own credentials for S3
+avatar uploads, baked into the container's environment at deploy time
+alongside `DATABASE_URL`. This is a long-lived IAM user + access key, which
+is deliberately **not** provisioned via CloudFormation or the assistant's
+own AWS access — creating IAM users (as opposed to roles) is a boundary the
+project owner wants to do manually themselves. If this user is ever lost
+and needs recreating:
+
+1. IAM console → Users → Create user → name `aberpack-app-runtime`, no
+   console access (programmatic only).
+2. Attach this inline policy (scoped to exactly what `lib/s3.ts` needs —
+   avatar upload/view under the `avatars/` prefix only):
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Sid": "AvatarUploadsOnly",
+         "Effect": "Allow",
+         "Action": ["s3:GetObject", "s3:PutObject"],
+         "Resource": "arn:aws:s3:::aberpack-photos-bucket/avatars/*"
+       }
+     ]
+   }
+   ```
+
+3. Create an access key (use case: "Application running outside AWS", or
+   "Other" if that option isn't offered — it's genuinely meant to be
+   long-lived here).
+4. Store it in SSM (SecureString), overwriting the existing parameters if
+   rotating:
+
+   ```
+   aws ssm put-parameter --name /aberpack/prod/aws_access_key_id --type SecureString --value "..." --overwrite
+   aws ssm put-parameter --name /aberpack/prod/aws_secret_access_key --type SecureString --value "..." --overwrite
+   ```
+
+`deploy.yml` reads these two parameters (plus `database_url`,
+`email_from`, `google_client_id`, `google_client_secret`,
+`google_refresh_token`, `app_url` — all under `/aberpack/prod/*`, all
+readable by `aberpack-github-deploy-role`) and bakes them into the
+container's `environment` block on every deploy — no redeploy of this
+stack is needed after rotating the key, just the next push to `main`.

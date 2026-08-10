@@ -9,8 +9,9 @@ wheels/
 # Virtual environments
 .venv
 
-# Account-specific AWS artifacts
-aws/iam/*.json
+# Account-specific working copies of IAM policies (real account ID) - the
+# scrubbed *-policy.json reference files ARE committed, see aws/iam/README.md
+aws/iam/*.local.json
 
 # Node dependencies
 /node_modules
@@ -43,6 +44,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel

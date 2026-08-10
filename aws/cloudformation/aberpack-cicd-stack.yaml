@@ -7,7 +7,7 @@ Description: >
   since it's CI/CD plumbing, not application infra.
   #
   # NOTE: an AWS account may only have ONE IAM OIDC provider per issuer URL.
-  # If another project in this same AWS account (752274131448) also wants
+  # If another project in this same AWS account also wants
   # GitHub Actions OIDC, it must reuse GitHubActionsOidcProvider below rather
   # than declare its own `token.actions.githubusercontent.com` provider, or
   # stack creation will fail with an "already exists" error.

@@ -1,5 +1,7 @@
 # **theabernathypack.com — Product Brief (v2)**
 
+> **STATUS: COMPLETE.** This brief was fully delivered via `plans/plan-v5.md` (M0 through M7, all built and live as of 2026-08-10). Kept here as the approved reference spec. The superseded v1 brief is kept in `requirements/archive/` for reference.
+
 > **Revision notes (v2 — approved):** Fixed duplicate section numbering (old 3.3/3.3 and 5/5) and a typo in section 1. Set data retention to a concrete 2 weeks (4.4). Added the Route53 domain note (2.1). Rewrote 3.1/3.2 to separate **Login** (auth) from **Base Profile** / **Relationship Profile** (descriptive records), replacing the earlier "joint ownership" language — editing is always single-owner; peer connections grant shared visibility only, never shared edit rights. Touched 3.4, 4.6, and 5.2 for consistent terminology. Database is decided as Serverless PostgreSQL and hosting as AWS App Runner (2.1). Family-graph scope for Milestone 1 is deferred to the planning phase.
 
 # **1\. Project Overview & Vision**
