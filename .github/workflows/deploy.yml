@@ -74,29 +74,48 @@ jobs:
           echo "image_ref=$IMAGE_REF" >> "$GITHUB_OUTPUT"
 
       - name: Create container service deployment
+        id: deploy
         run: |
-          aws lightsail create-container-service-deployment \
+          CONTAINERS=$(jq -n --arg image "${{ steps.push.outputs.image_ref }}" --arg dburl "$DATABASE_URL" \
+            '{app: {image: $image, environment: {DATABASE_URL: $dburl}, ports: {"3000": "HTTP"}}}')
+          RESPONSE=$(aws lightsail create-container-service-deployment \
             --region "$AWS_REGION" \
             --service-name "$LIGHTSAIL_SERVICE_NAME" \
-            --containers "{\"app\":{\"image\":\"${{ steps.push.outputs.image_ref }}\",\"ports\":{\"3000\":\"HTTP\"}}}" \
-            --public-endpoint "{\"containerName\":\"app\",\"containerPort\":3000}"
+            --containers "$CONTAINERS" \
+            --public-endpoint '{"containerName":"app","containerPort":3000}')
+          echo "$RESPONSE" | jq 'del(.containerService.currentDeployment.containers.app.environment, .containerService.nextDeployment.containers.app.environment)'
+          VERSION=$(echo "$RESPONSE" | jq -r '.containerService.nextDeployment.version')
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            echo "Could not determine the new deployment's version from the API response" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Wait for deployment to become active
+      # currentDeployment.state reads ACTIVE immediately after triggering a
+      # new deployment too - it still reflects the *previous* live
+      # deployment until the new one (nextDeployment, whose version we
+      # captured above) actually takes over. Polling on state alone without
+      # checking the version first declared success against the old
+      # deployment without ever observing the new one roll out.
+      - name: Wait for the new deployment to become active
         run: |
           for i in $(seq 1 30); do
-            STATE=$(aws lightsail get-container-services \
+            CURRENT=$(aws lightsail get-container-services \
               --service-name "$LIGHTSAIL_SERVICE_NAME" \
-              --query 'containerServices[0].currentDeployment.state' \
-              --output text)
-            echo "Deployment state: $STATE"
-            if [ "$STATE" = "ACTIVE" ]; then
+              --query 'containerServices[0].currentDeployment.{version:version,state:state}' \
+              --output json)
+            echo "Current deployment: $CURRENT"
+            CUR_VERSION=$(echo "$CURRENT" | jq -r '.version')
+            CUR_STATE=$(echo "$CURRENT" | jq -r '.state')
+            if [ "$CUR_VERSION" = "${{ steps.deploy.outputs.version }}" ] && [ "$CUR_STATE" = "ACTIVE" ]; then
+              echo "Deployment ${{ steps.deploy.outputs.version }} is active"
               exit 0
             fi
-            if [ "$STATE" = "FAILED" ]; then
+            if [ "$CUR_STATE" = "FAILED" ]; then
               echo "Deployment failed" >&2
               exit 1
             fi
             sleep 10
           done
-          echo "Timed out waiting for deployment to become active" >&2
+          echo "Timed out waiting for deployment ${{ steps.deploy.outputs.version }} to become active" >&2
           exit 1
