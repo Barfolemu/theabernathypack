@@ -26,5 +26,5 @@ export async function loginAction(
   }
 
   await createSession(login.id);
-  redirect("/account");
+  redirect("/events");
 }
