@@ -1,0 +1,89 @@
+name: Jira Bug Triage & Plan
+
+# Fired by a Jira Automation rule ("Issue created", issue type = Bug) that
+# sends a repository_dispatch to this repo. See scripts/jira-*.sh for how
+# Claude talks back to Jira - this stage is read-only against the codebase.
+on:
+  repository_dispatch:
+    types: [jira-bug-triage]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+      JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # full history so git log/blame are useful for triage
+
+      - name: Make Jira helper scripts executable
+        run: chmod +x scripts/jira-*.sh
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            A new bug was reported in Jira: ${{ github.event.client_payload.issue_key }}
+
+            Summary: ${{ github.event.client_payload.summary }}
+
+            Description:
+            ${{ github.event.client_payload.description }}
+
+            Investigate this codebase to confirm whether this is a real bug
+            and, if so, how you'd fix it. This is a read-only investigation -
+            do not edit, create, or delete any files. Cross-reference
+            plans/plan-v5.md for the intended behavior where relevant (e.g.
+            section 3.3 for the relationship/permission rules, section 3.1
+            for auth). git log and git blame are available if it helps
+            establish when something regressed.
+
+            When you're done, post exactly ONE comment on the issue by
+            running:
+              scripts/jira-comment.sh "${{ github.event.client_payload.issue_key }}" "<body>"
+
+            The comment body must use exactly these section labels, each
+            followed by a blank line before the next section:
+
+            Verdict: Confirmed bug / Not a bug / Needs more info / Likely duplicate of <KEY>
+
+            Root cause: specific file and line references, and why. If the
+            verdict is "Needs more info," say exactly what information is
+            missing instead.
+
+            Proposed fix: what you'd change and why. Omit this section
+            entirely if the verdict isn't "Confirmed bug."
+
+            Files touched: the files you'd expect to change. Omit if the
+            verdict isn't "Confirmed bug."
+
+            Test plan: the specific regression test you'd write to prove the
+            bug exists, then prove the fix works. Omit if the verdict isn't
+            "Confirmed bug."
+
+            Risk: blast radius, what could break. Omit if the verdict isn't
+            "Confirmed bug."
+
+            Confidence: low, medium, or high, and why. Be explicit that this
+            is careful code review, not a live reproduction - there's no
+            test suite or staging environment wired into this pipeline yet,
+            so say so plainly rather than sounding more certain than the
+            evidence supports.
+
+            After the comment posts successfully, run:
+              scripts/jira-label.sh "${{ github.event.client_payload.issue_key }}" claude-triaged
+
+            Do not run any other Jira script, do not transition any Jira
+            status, and do not edit any repository files under any
+            circumstances.
+          claude_args: |
+            --allowedTools "Bash(scripts/jira-comment.sh:*),Bash(scripts/jira-label.sh:*),Bash(git log:*),Bash(git blame:*),Read,Glob,Grep"
+            --max-turns 25
