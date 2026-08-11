@@ -1,0 +1,72 @@
+name: Jira Bug Fix
+
+# Fired by a Jira Automation rule when the "approved-fix" label is added to
+# an issue Claude already triaged. Unlike the triage workflow, this one is
+# allowed to edit files, run commands, and open a PR - it's only reached
+# after a human has read Claude's triage comment and approved it.
+on:
+  repository_dispatch:
+    types: [jira-bug-approved]
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+      JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Make Jira helper scripts executable
+        run: chmod +x scripts/jira-*.sh
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            The Jira issue ${{ github.event.client_payload.issue_key }} was
+            approved for a fix. Start by running:
+              scripts/jira-get-issue.sh "${{ github.event.client_payload.issue_key }}"
+
+            This returns the issue's summary, description, labels, and full
+            comment history as JSON - read it to find your own earlier
+            triage comment (Verdict / Root cause / Proposed fix / Files
+            touched / Test plan / Risk / Confidence). Treat that comment as
+            the approved plan. If the verdict in it wasn't "Confirmed bug,"
+            stop and comment on the issue explaining you can't proceed
+            without a confirmed-bug triage, then do nothing further.
+
+            Otherwise, implement the fix:
+            1. Create a branch named
+               fix/${{ github.event.client_payload.issue_key }}-<short-slug>
+            2. If vitest isn't already a devDependency, add it, add a
+               "test": "vitest run" script to package.json, and add a step
+               running it to .github/workflows/ci.yml, right after the lint
+               step - this repo has no test runner yet and this fix should
+               be the one that adds it.
+            3. Write a regression test that reproduces the bug per your
+               Test plan, confirm it fails, then make the fix and confirm
+               the test passes.
+            4. Run npm run lint, npm run build, and npm test, and don't
+               proceed until all three pass.
+            5. Commit, push the branch, and open a PR against main titled
+               "fix(${{ github.event.client_payload.issue_key }}): <short
+               description>" whose body links back to the Jira issue and
+               summarizes the fix and the test you added.
+            6. Run scripts/jira-comment.sh with the PR's URL and a short
+               summary, then scripts/jira-label.sh to add "pr-open".
+
+            Do not merge the PR yourself under any circumstances - that
+            only happens when a human asks for it directly on the PR.
+          claude_args: |
+            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(git:*),Bash(gh:*),Bash(npm:*),Bash(scripts/jira-comment.sh:*),Bash(scripts/jira-label.sh:*),Bash(scripts/jira-get-issue.sh:*)"
+            --max-turns 60
