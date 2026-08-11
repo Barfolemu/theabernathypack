@@ -66,4 +66,4 @@ jobs:
             Never merge the PR unless a human explicitly asks on the PR.
           claude_args: |
             --allowedTools "Read,Write,Edit,Glob,Grep,Bash(git:*),Bash(gh:*),Bash(npm:*),Bash(scripts/jira-comment.sh:*),Bash(scripts/jira-transition.sh:*),Bash(scripts/jira-get-issue.sh:*)"
-            --max-turns 60
+            --max-turns 100
