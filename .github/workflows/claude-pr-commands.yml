@@ -1,0 +1,43 @@
+name: Claude PR Commands
+
+# Interactive mode (no `prompt:` input) - Claude reads whatever was actually
+# typed in the comment, with full file/line/diff context, and replies in
+# the same thread. Covers three ways to talk to it on a PR:
+#   - issue_comment: a top-level comment on the PR's main conversation tab
+#   - pull_request_review_comment: a comment on a specific line in
+#     "Files changed" - carries the file path, line number, and diff hunk
+#   - pull_request_review: the summary comment when a batched review
+#     (Approve / Request changes / Comment) is submitted
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: read
+  id-token: write
+
+jobs:
+  claude:
+    # issue_comment and pull_request_review_comment put the text on
+    # github.event.comment.body; a submitted review's own summary text
+    # (as opposed to its individual line comments, which arrive as
+    # separate pull_request_review_comment events) lives on
+    # github.event.review.body instead.
+    if: |
+      contains(github.event.comment.body, '@claude') ||
+      contains(github.event.review.body, '@claude')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
