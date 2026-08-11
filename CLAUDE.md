@@ -13,7 +13,7 @@
 
 ## Working on bugs from Jira
 
-- Jira issue keys look like `ABE-123`. If a PR or branch name references one,
+- Jira issue keys look like `KAN-123`. If a PR or branch name references one,
   treat that ticket's linked comments (triage verdict, plan) as authoritative
   context for what the fix should do.
 - When fixing a confirmed bug, write a regression test that reproduces it
