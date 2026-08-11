@@ -1,9 +1,7 @@
-name: Jira Bug Fix
+name: Jira Issue Fix
 
-# Fired by a Jira Automation rule when the "approved-fix" label is added to
-# an issue Claude already triaged. Unlike the triage workflow, this one is
-# allowed to edit files, run commands, and open a PR - it's only reached
-# after a human has read Claude's triage comment and approved it.
+# Fired by Jira Automation when a reviewer approves a triaged Bug or Task by
+# moving it from Triage Review to In Progress.
 on:
   repository_dispatch:
     types: [jira-bug-approved]
@@ -33,40 +31,39 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
-            The Jira issue ${{ github.event.client_payload.issue_key }} was
-            approved for a fix. Start by running:
+            Jira issue ${{ github.event.client_payload.issue_key }} was approved
+            for implementation. Start by running:
               scripts/jira-get-issue.sh "${{ github.event.client_payload.issue_key }}"
 
-            This returns the issue's summary, description, labels, and full
-            comment history as JSON - read it to find your own earlier
-            triage comment (Verdict / Root cause / Proposed fix / Files
-            touched / Test plan / Risk / Confidence). Treat that comment as
-            the approved plan. If the verdict in it wasn't "Confirmed bug,"
-            stop and comment on the issue explaining you can't proceed
-            without a confirmed-bug triage, then do nothing further.
+            Read the issue summary, description, labels, and comments. Locate
+            the earlier triage comment containing Verdict / Why this happens /
+            Proposed fix / Files touched / Test plan / Risk / Confidence and
+            treat it as the approved plan.
 
-            Otherwise, implement the fix:
+            If its verdict is not "Confirmed - should be addressed," comment
+            on the Jira issue explaining that implementation cannot proceed
+            without a confirmed triage, then stop without changing code.
+
+            Otherwise:
             1. Create a branch named
-               fix/${{ github.event.client_payload.issue_key }}-<short-slug>
-            2. If vitest isn't already a devDependency, add it, add a
-               "test": "vitest run" script to package.json, and add a step
-               running it to .github/workflows/ci.yml, right after the lint
-               step - this repo has no test runner yet and this fix should
-               be the one that adds it.
-            3. Write a regression test that reproduces the bug per your
-               Test plan, confirm it fails, then make the fix and confirm
+               fix/${{ github.event.client_payload.issue_key }}-<short-slug>.
+            2. If vitest is not already a devDependency, add it, add a
+               "test": "vitest run" package script, and add npm test to
+               .github/workflows/ci.yml after lint.
+            3. Write a regression or behavior test that demonstrates the
+               issue, confirm it fails, implement the correction, and confirm
                the test passes.
-            4. Run npm run lint, npm run build, and npm test, and don't
-               proceed until all three pass.
-            5. Commit, push the branch, and open a PR against main titled
-               "fix(${{ github.event.client_payload.issue_key }}): <short
-               description>" whose body links back to the Jira issue and
-               summarizes the fix and the test you added.
-            6. Run scripts/jira-comment.sh with the PR's URL and a short
-               summary, then scripts/jira-label.sh to add "pr-open".
+            4. Run npm run lint, npm run build, and npm test. Do not proceed
+               until all three pass.
+            5. Commit, push, and open a PR against main titled
+               "fix(${{ github.event.client_payload.issue_key }}): <short description>".
+               Link the Jira issue in the PR body and summarize the correction
+               and its test.
+            6. Post the PR URL and a short summary with jira-comment.sh, then
+               run:
+                 scripts/jira-transition.sh "${{ github.event.client_payload.issue_key }}" "PR Review"
 
-            Do not merge the PR yourself under any circumstances - that
-            only happens when a human asks for it directly on the PR.
+            Never merge the PR unless a human explicitly asks on the PR.
           claude_args: |
-            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(git:*),Bash(gh:*),Bash(npm:*),Bash(scripts/jira-comment.sh:*),Bash(scripts/jira-label.sh:*),Bash(scripts/jira-get-issue.sh:*)"
+            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(git:*),Bash(gh:*),Bash(npm:*),Bash(scripts/jira-comment.sh:*),Bash(scripts/jira-transition.sh:*),Bash(scripts/jira-get-issue.sh:*)"
             --max-turns 60

@@ -6,7 +6,7 @@
 # Jira Cloud's v3 API requires comments in Atlassian Document Format (ADF)
 # rather than plain text. This wraps the given text as ADF, splitting on
 # blank lines into separate paragraph nodes so a multi-section comment
-# (Verdict / Root cause / etc.) still renders as readable paragraphs
+# (Verdict / Why this happens / etc.) still renders as readable paragraphs
 # instead of one run-on block.
 #
 # Requires JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN in the environment.
