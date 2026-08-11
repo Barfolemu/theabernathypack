@@ -1,8 +1,7 @@
-name: Jira Bug Triage & Plan
+name: Jira Issue Triage & Plan
 
-# Fired by a Jira Automation rule ("Issue created", issue type = Bug) that
-# sends a repository_dispatch to this repo. See scripts/jira-*.sh for how
-# Claude talks back to Jira - this stage is read-only against the codebase.
+# Fired by Jira Automation for newly-created Bug or Task items, and again
+# when a reviewer sends an item back to To Do for additional triage.
 on:
   repository_dispatch:
     types: [jira-bug-triage]
@@ -22,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0 # full history so git log/blame are useful for triage
+          fetch-depth: 0
 
       - name: Make Jira helper scripts executable
         run: chmod +x scripts/jira-*.sh
@@ -31,59 +30,57 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
-            A new bug was reported in Jira: ${{ github.event.client_payload.issue_key }}
+            A new issue was reported in Jira: ${{ github.event.client_payload.issue_key }}
 
             Summary: ${{ github.event.client_payload.summary }}
 
             Description:
             ${{ github.event.client_payload.description }}
 
-            Investigate this codebase to confirm whether this is a real bug
-            and, if so, how you'd fix it. This is a read-only investigation -
-            do not edit, create, or delete any files. Cross-reference
-            plans/plan-v5.md for the intended behavior where relevant (e.g.
-            section 3.3 for the relationship/permission rules, section 3.1
-            for auth). git log and git blame are available if it helps
-            establish when something regressed.
+            Investigate this codebase to determine whether this is actionable.
+            An actionable issue may be a genuine defect or a small, clearly
+            defined missed requirement whose intended behavior was never built.
+            Determine how it should be addressed. This is a read-only
+            investigation: do not edit, create, or delete any files.
 
-            When you're done, post exactly ONE comment on the issue by
-            running:
+            Cross-reference plans/plan-v5.md for intended MVP behavior where
+            relevant. Use git log and git blame when they help establish when
+            behavior changed or why it exists.
+
+            When finished, post exactly ONE comment on the issue by running:
               scripts/jira-comment.sh "${{ github.event.client_payload.issue_key }}" "<body>"
 
             The comment body must use exactly these section labels, each
             followed by a blank line before the next section:
 
-            Verdict: Confirmed bug / Not a bug / Needs more info / Likely duplicate of <KEY>
+            Verdict: Confirmed - should be addressed / Not applicable / Needs more info / Likely duplicate of <KEY>
 
-            Root cause: specific file and line references, and why. If the
-            verdict is "Needs more info," say exactly what information is
-            missing instead.
+            Why this happens: specific file and line references and why,
+            whether that is a defect or a requirement that was never
+            implemented. If the verdict is "Needs more info," state exactly
+            what information is missing instead.
 
-            Proposed fix: what you'd change and why. Omit this section
-            entirely if the verdict isn't "Confirmed bug."
+            Proposed fix: what to change and why. Omit this section unless the
+            verdict is "Confirmed - should be addressed."
 
-            Files touched: the files you'd expect to change. Omit if the
-            verdict isn't "Confirmed bug."
+            Files touched: files expected to change. Omit this section unless
+            the verdict is "Confirmed - should be addressed."
 
-            Test plan: the specific regression test you'd write to prove the
-            bug exists, then prove the fix works. Omit if the verdict isn't
-            "Confirmed bug."
+            Test plan: the regression or behavior test that proves the current
+            issue and then proves the correction works. Omit this section
+            unless the verdict is "Confirmed - should be addressed."
 
-            Risk: blast radius, what could break. Omit if the verdict isn't
-            "Confirmed bug."
+            Risk: blast radius and what could break. Omit this section unless
+            the verdict is "Confirmed - should be addressed."
 
-            Confidence: low, medium, or high, and why. Be explicit that this
-            is careful code review, not a live reproduction - there's no
-            test suite or staging environment wired into this pipeline yet,
-            so say so plainly rather than sounding more certain than the
-            evidence supports.
+            Confidence: low, medium, or high, and why. State plainly that this
+            is code review rather than a live reproduction when no test or
+            staging reproduction was performed.
 
             After the comment posts successfully, run:
-              scripts/jira-label.sh "${{ github.event.client_payload.issue_key }}" claude-triaged
+              scripts/jira-transition.sh "${{ github.event.client_payload.issue_key }}" "Triage Review"
 
-            Do not run any other Jira script, do not transition any Jira
-            status, and do not edit any repository files under any
-            circumstances.
+            Do not run any other Jira script and do not edit repository files.
           claude_args: |
-            --allowedTools "Bash(scripts/jira-comment.sh:*),Bash(scripts/jira-label.sh:*),Bash(git log:*),Bash(git blame:*),Read,Glob,Grep"
+            --allowedTools "Bash(scripts/jira-comment.sh:*),Bash(scripts/jira-transition.sh:*),Bash(git log:*),Bash(git blame:*),Read,Glob,Grep"
             --max-turns 25

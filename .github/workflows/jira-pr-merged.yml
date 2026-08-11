@@ -1,0 +1,49 @@
+name: Jira PR Merged
+
+# Closes the Jira loop after a human merges a generated fix PR. The issue key
+# is taken from the fix/KAN-123-slug branch name.
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  complete-ticket:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    env:
+      JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+      JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Make Jira helper scripts executable
+        run: chmod +x scripts/jira-*.sh
+
+      - name: Extract Jira issue key from branch name
+        id: extract
+        env:
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          KEY=$(printf '%s\n' "$PR_BRANCH" | grep -oE 'KAN-[0-9]+' | head -n1 || true)
+          if [ -z "$KEY" ]; then
+            echo "No KAN Jira issue key found in branch name; skipping."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "key=$KEY" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment and complete the Jira ticket
+        if: steps.extract.outputs.found == 'true'
+        env:
+          JIRA_KEY: ${{ steps.extract.outputs.key }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          scripts/jira-comment.sh "$JIRA_KEY" "Merged in $PR_URL. Deployment was triggered automatically."
+          scripts/jira-transition.sh "$JIRA_KEY" "Done"
