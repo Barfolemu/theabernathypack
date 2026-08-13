@@ -96,5 +96,5 @@ export async function registerAction(
   }
 
   await createSession(loginId);
-  redirect("/account");
+  redirect("/profiles");
 }
