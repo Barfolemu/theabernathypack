@@ -35,6 +35,13 @@ export default async function ProfilesPage() {
           >
             My Pack
           </Button>
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={<Link href="/profiles/link" />}
+          >
+            Link Accounts
+          </Button>
           <Button nativeButton={false} render={<Link href="/profiles/new" />}>New profile</Button>
         </div>
       </div>
