@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
 import { profiles, relationships, type Profile, type RelationshipCategory } from "@/db/schema";
 import { canControlProfile } from "@/lib/profiles";
@@ -47,13 +47,15 @@ export async function getPack(profileId: string): Promise<PackMember[]> {
   });
 }
 
-// Candidates for the "add to pack" picker: everyone except the profile itself and
-// anyone already linked to it. Permission is enforced at write time either way.
-export async function listLinkableProfiles(profileId: string): Promise<Profile[]> {
-  const pack = await getPack(profileId);
-  const excludeIds = new Set([profileId, ...pack.map((member) => member.profile.id)]);
-  const all = await db.select().from(profiles);
-  return all.filter((profile) => !excludeIds.has(profile.id));
+// Profiles the given Base Profile may manage in the internal-linking workspace:
+// itself, plus any non-base profile it created that hasn't since been claimed by
+// someone else via invite acceptance (loginId now set = no longer theirs to manage).
+export async function listManagedProfiles(baseProfile: Profile): Promise<Profile[]> {
+  const created = await db
+    .select()
+    .from(profiles)
+    .where(and(eq(profiles.creatorId, baseProfile.id), isNull(profiles.loginId)));
+  return [baseProfile, ...created];
 }
 
 async function loadPair(idA: string, idB: string): Promise<[Profile, Profile] | null> {
