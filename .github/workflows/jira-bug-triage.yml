@@ -29,6 +29,7 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          show_full_output: true
           prompt: |
             A new issue was reported in Jira: ${{ github.event.client_payload.issue_key }}
 
@@ -83,4 +84,4 @@ jobs:
             Do not run any other Jira script and do not edit repository files.
           claude_args: |
             --allowedTools "Bash(scripts/jira-comment.sh:*),Bash(scripts/jira-transition.sh:*),Bash(git log:*),Bash(git blame:*),Read,Glob,Grep"
-            --max-turns 25
+            --max-turns 40
