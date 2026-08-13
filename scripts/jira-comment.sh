@@ -28,12 +28,17 @@ for var in JIRA_BASE_URL JIRA_EMAIL JIRA_API_TOKEN; do
   fi
 done
 
-ADF_BODY=$(jq -n --arg text "$BODY_TEXT" '
+SIGNATURE="🤖 Posted by Claude (automated)"
+
+ADF_BODY=$(jq -n --arg sig "$SIGNATURE" --arg text "$BODY_TEXT" '
   ($text | split("\n\n")) as $paras |
   {
     type: "doc",
     version: 1,
-    content: [ $paras[] | select(length > 0) | { type: "paragraph", content: [ { type: "text", text: . } ] } ]
+    content: (
+      [ { type: "paragraph", content: [ { type: "text", text: $sig, marks: [{ type: "em" }] } ] } ]
+      + [ $paras[] | select(length > 0) | { type: "paragraph", content: [ { type: "text", text: . } ] } ]
+    )
   }
 ')
 
